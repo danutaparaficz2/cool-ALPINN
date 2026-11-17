@@ -21,7 +21,7 @@ def plotly_javascript():
 st.set_page_config(page_title="COOL-ALPINN | Interactive Shop-Floor Simulator", layout="wide")
 st.title("COOL-ALPINN: Interactive Shop-Floor Heat & Worker Safety Simulator")
 st.markdown(
-    "<div style='font-size: 1.25rem; font-weight: 600; line-height: 1.4;'>"
+    "<div style='font-size: 1.25rem; font-weight: 600; line-height: 1.4; color: #0068c9;'>"
     "Drag the worker or a blue ventilation marker. "
     "Moving a vent recalculates the temperature field.</div>",
     unsafe_allow_html=True,
