@@ -292,12 +292,12 @@ with col_map:
 
     fig_map.update_layout(
         title=dict(text="Shop-Floor Temperature", x=0, xanchor="left", y=0.98, yanchor="top", font=dict(size=15)),
-        xaxis=dict(title="Shop Floor X (meters)", range=[0, Lx], constrain="domain"),
-        yaxis=dict(title="Shop Floor Y (meters)", range=[0, Ly], scaleanchor="x", scaleratio=1),
+        xaxis=dict(title="Shop Floor X (meters)", range=[0, Lx], constrain="domain", fixedrange=True),
+        yaxis=dict(title="Shop Floor Y (meters)", range=[0, Ly], scaleanchor="x", scaleratio=1, fixedrange=True),
         legend=dict(orientation="v", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=11)),
         margin=dict(l=40, r=20, t=135, b=50),
         height=530,
-        dragmode="pan"
+        dragmode=False
     )
 
     event = worker_map(
