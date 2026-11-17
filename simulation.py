@@ -22,11 +22,11 @@ st.set_page_config(page_title="COOL-ALPINN | Interactive Shop-Floor Simulator", 
 st.title("COOL-ALPINN: Interactive Shop-Floor Heat & Worker Safety Simulator")
 st.markdown(
     "<div style='font-size: 1.25rem; font-weight: 600; line-height: 1.4;'>"
-    "Drag the worker or a blue ventilation marker, or click the floor to move the worker. "
+    "Drag the worker or a blue ventilation marker. "
     "Moving a vent recalculates the temperature field.</div>",
     unsafe_allow_html=True,
 )
-st.caption("Flames indicate the worker is within 1.5 m of the furnace; this is an illustration, not a safety assessment.")
+st.caption("Prototype only; not a safety assessment.")
 
 # ==========================================
 # SESSION STATE FOR DRAGGABLE WORKER (X, Y)
