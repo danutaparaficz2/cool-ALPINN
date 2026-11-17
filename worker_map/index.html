@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    #container { position: relative; width: 100%; height: 530px; }
+    #chart { width: 100%; height: 100%; }
+    #worker {
+      position: absolute;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      overflow: visible;
+      z-index: 1;
+    }
+    #worker:active { cursor: grabbing; }
+    #worker:focus-visible { outline: 2px solid #0068c9; }
+    .vent {
+      position: absolute;
+      width: 25px;
+      height: 25px;
+      padding: 3px;
+      border: 0;
+      background: transparent;
+      cursor: grab;
+      touch-action: none;
+      z-index: 2;
+    }
+    .vent:active { cursor: grabbing; }
+    .vent:focus-visible { outline: 2px solid #0068c9; }
+    #flames { transform-origin: 60px 140px; animation: flicker 0.7s ease-in-out infinite alternate; }
+    @keyframes flicker { from { transform: scale(1, 0.94); } to { transform: scale(1.05, 1.04); } }
+    @media (prefers-reduced-motion: reduce) { #flames { animation: none; } }
+    #error { color: #b00020; padding: 1em; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="chart"></div>
+    <svg id="worker" viewBox="0 0 120 150" role="img" tabindex="0"
+         aria-label="Worker: drag or use arrow keys to move">
+      <title id="worker-title"></title>
+      <g id="flames" style="display: none" aria-hidden="true">
+        <path d="M 28 142 C 5 129 10 101 19 84 C 19 99 28 99 30 88
+                 C 33 72 22 63 34 47 C 37 63 47 67 49 53
+                 C 52 39 48 24 61 8 C 61 28 78 34 76 52
+                 C 87 45 83 35 85 31 C 103 51 98 68 93 79
+                 C 105 73 107 64 107 62 C 120 90 114 126 94 142 Z"
+              fill="#f97316" stroke="#b91c1c" stroke-width="2"/>
+        <path d="M 33 142 C 22 128 27 111 33 103 C 34 114 42 110 42 99
+                 C 44 87 39 79 48 68 C 49 83 58 87 62 76
+                 C 67 64 63 56 70 49 C 73 67 87 73 82 90
+                 C 90 86 92 81 92 79 C 104 103 100 129 87 142 Z"
+              fill="#facc15"/>
+      </g>
+      <path d="M 40 77 C 23 80 20 103 29 109 C 37 113 39 99 40 96
+               L 40 124 C 29 125 29 140 43 140 L 77 140
+               C 91 140 91 125 80 124 L 80 96
+               C 81 99 83 113 91 109 C 100 103 97 80 80 77 Z"
+            fill="white" stroke="black" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M 60 140 L 60 125" stroke="black" stroke-width="4"/>
+      <circle id="head" cx="60" cy="48" r="31" fill="white" stroke="black" stroke-width="4"/>
+      <circle cx="49" cy="43" r="3" fill="black"/>
+      <circle cx="71" cy="43" r="3" fill="black"/>
+      <path id="smile" d="M 48 57 Q 60 69 72 57" fill="none" stroke="black" stroke-width="2.5"/>
+      <ellipse id="hot-mouth" cx="60" cy="59" rx="5" ry="6" fill="#7a1f1f" stroke="black" stroke-width="1.5" style="display: none"/>
+      <path id="sweat" d="M 96 24 C 85 39 88 47 96 47 C 104 47 107 39 96 24 Z"
+            fill="deepskyblue" stroke="black" stroke-width="1.5" style="display: none"/>
+    </svg>
+  </div>
+  <div id="error" hidden></div>
+  <script>
+    const chart = document.getElementById("chart");
+    const worker = document.getElementById("worker");
+    let args;
+    let current;
+    let drag;
+    let ventPositions = [];
+    let renderCount = 0;
+
+    function send(type, data = {}) {
+      window.parent.postMessage({isStreamlitMessage: true, type, ...data}, "*");
+    }
+
+    function setPosition(x, y) {
+      const [xmin, xmax, ymin, ymax] = args.bounds;
+      current = {
+        x: Math.max(xmin, Math.min(xmax, x)),
+        y: Math.max(ymin, Math.min(ymax, y))
+      };
+      const [furnaceX, furnaceY] = args.furnace_position;
+      const nearFurnace = Math.hypot(current.x - furnaceX, current.y - furnaceY) <= args.flame_distance;
+      document.getElementById("flames").style.display = nearFurnace ? "" : "none";
+      document.getElementById("head").setAttribute(
+        "fill", nearFurnace ? "#ef4444" : (!args.is_alert ? "#fff4df" : (args.is_hot ? "#ffb3a7" : "white"))
+      );
+      worker.setAttribute("aria-label", nearFurnace
+        ? "Worker near furnace, illustrated with flames: drag or use arrow keys to move"
+        : "Worker: drag or use arrow keys to move");
+      const xa = chart._fullLayout.xaxis;
+      const ya = chart._fullLayout.yaxis;
+      const scale = 1.05;
+      const width = Math.abs(xa.d2p(1.8 * scale) - xa.d2p(0));
+      const height = Math.abs(ya.d2p(2.03 * scale) - ya.d2p(0));
+      worker.style.width = `${width}px`;
+      worker.style.height = `${height}px`;
+      worker.style.left = `${xa._offset + xa.d2p(current.x) - width / 2}px`;
+      worker.style.top = `${ya._offset + ya.d2p(current.y + 1.05 * scale)}px`;
+    }
+
+    function reportPosition(kind = "worker", position = current, index = null) {
+      send("streamlit:setComponentValue", {
+        value: {kind, x: position.x, y: position.y, index, id: `${Date.now()}-${Math.random()}`},
+        dataType: "json"
+      });
+    }
+
+    function positionVent(button, index, x, y) {
+      const xa = chart._fullLayout.xaxis;
+      const ya = chart._fullLayout.yaxis;
+      const [xmin, xmax, ymin, ymax] = args.vent_bounds;
+      const position = {
+        x: Math.max(xmin, Math.min(xmax, x)),
+        y: Math.max(ymin, Math.min(ymax, y))
+      };
+      ventPositions[index] = position;
+      button.style.left = `${xa._offset + xa.d2p(position.x) - 12.5}px`;
+      button.style.top = `${ya._offset + ya.d2p(position.y) - 12.5}px`;
+      button.title = `Vent ${index + 1}: (${position.x.toFixed(1)} m, ${position.y.toFixed(1)} m)`;
+    }
+
+    function renderVents() {
+      document.querySelectorAll(".vent").forEach(button => button.remove());
+      ventPositions = args.vents.map(([x, y]) => ({x, y}));
+      ventPositions.forEach((position, index) => {
+        const button = document.createElement("button");
+        button.className = "vent";
+        button.setAttribute("aria-label", `Vent ${index + 1}: drag or use arrow keys to move`);
+        button.innerHTML = `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <circle cx="12" cy="12" r="11" fill="#e0f7ff" stroke="black" stroke-width="1.5"/>
+          <g fill="deepskyblue" stroke="#075985" stroke-width="0.7">
+            <path d="M12 12 C9 10 9 4 12 3.5 C15.5 3 16 7 12 12 Z"/>
+            <path d="M12 12 C9 10 9 4 12 3.5 C15.5 3 16 7 12 12 Z" transform="rotate(120 12 12)"/>
+            <path d="M12 12 C9 10 9 4 12 3.5 C15.5 3 16 7 12 12 Z" transform="rotate(240 12 12)"/>
+          </g>
+          <circle cx="12" cy="12" r="1.8" fill="#075985"/>
+        </svg>`;
+        document.getElementById("container").appendChild(button);
+        positionVent(button, index, position.x, position.y);
+        let ventDrag;
+        button.addEventListener("pointerdown", event => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          ventDrag = {pointer: event.pointerId, x: event.clientX, y: event.clientY, start: {...ventPositions[index]}};
+          button.setPointerCapture(event.pointerId);
+        });
+        button.addEventListener("pointermove", event => {
+          if (!ventDrag || ventDrag.pointer !== event.pointerId) return;
+          const xa = chart._fullLayout.xaxis;
+          const ya = chart._fullLayout.yaxis;
+          positionVent(button, index,
+            xa.p2d(xa.d2p(ventDrag.start.x) + event.clientX - ventDrag.x),
+            ya.p2d(ya.d2p(ventDrag.start.y) + event.clientY - ventDrag.y));
+        });
+        button.addEventListener("pointerup", event => {
+          if (!ventDrag || ventDrag.pointer !== event.pointerId) return;
+          const start = ventDrag.start;
+          ventDrag = null;
+          const pos = ventPositions[index];
+          if (Math.abs(pos.x - start.x) > 0.01 || Math.abs(pos.y - start.y) > 0.01) {
+            reportPosition("vent", pos, index);
+          }
+        });
+        button.addEventListener("pointercancel", () => {
+          if (ventDrag) positionVent(button, index, ventDrag.start.x, ventDrag.start.y);
+          ventDrag = null;
+        });
+        button.addEventListener("keydown", event => {
+          const directions = {
+            ArrowLeft: [-0.2, 0], ArrowRight: [0.2, 0],
+            ArrowUp: [0, 0.2], ArrowDown: [0, -0.2]
+          };
+          if (!directions[event.key]) return;
+          event.preventDefault();
+          const [dx, dy] = directions[event.key];
+          const pos = ventPositions[index];
+          positionVent(button, index, pos.x + dx, pos.y + dy);
+          reportPosition("vent", ventPositions[index], index);
+        });
+      });
+    }
+
+    worker.addEventListener("pointerdown", event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      drag = {pointer: event.pointerId, x: event.clientX, y: event.clientY, start: {...current}};
+      worker.setPointerCapture(event.pointerId);
+    });
+
+    worker.addEventListener("pointermove", event => {
+      if (!drag || drag.pointer !== event.pointerId) return;
+      const xa = chart._fullLayout.xaxis;
+      const ya = chart._fullLayout.yaxis;
+      const x = xa.p2d(xa.d2p(drag.start.x) + event.clientX - drag.x);
+      const y = ya.p2d(ya.d2p(drag.start.y) + event.clientY - drag.y);
+      setPosition(x, y);
+    });
+
+    worker.addEventListener("pointerup", event => {
+      if (!drag || drag.pointer !== event.pointerId) return;
+      const start = drag.start;
+      drag = null;
+      if (Math.abs(current.x - start.x) > 0.01 || Math.abs(current.y - start.y) > 0.01) {
+        reportPosition();
+      }
+    });
+
+    worker.addEventListener("pointercancel", () => {
+      if (drag) setPosition(drag.start.x, drag.start.y);
+      drag = null;
+    });
+
+    worker.addEventListener("keydown", event => {
+      const directions = {
+        ArrowLeft: [-0.2, 0], ArrowRight: [0.2, 0],
+        ArrowUp: [0, 0.2], ArrowDown: [0, -0.2]
+      };
+      if (!directions[event.key]) return;
+      event.preventDefault();
+      const [dx, dy] = directions[event.key];
+      setPosition(current.x + dx, current.y + dy);
+      reportPosition();
+    });
+
+    window.addEventListener("message", async event => {
+      if (event.data.type !== "streamlit:render") return;
+      const render = ++renderCount;
+      args = event.data.args;
+      try {
+        if (!window.Plotly) {
+          const script = document.createElement("script");
+          script.textContent = args.plotly_js;
+          document.head.appendChild(script);
+        }
+        await Plotly.react(chart, args.figure.data, args.figure.layout, {
+          displayModeBar: false, responsive: true
+        });
+        if (render !== renderCount) return;
+        chart.removeAllListeners("plotly_click");
+        chart.on("plotly_click", click => {
+          const point = click.points[0];
+          if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            setPosition(point.x, point.y);
+            reportPosition();
+          }
+        });
+        chart.removeAllListeners("plotly_relayout");
+        chart.on("plotly_relayout", () => {
+          setPosition(current.x, current.y);
+          document.querySelectorAll(".vent").forEach((button, index) => {
+            const pos = ventPositions[index];
+            positionVent(button, index, pos.x, pos.y);
+          });
+        });
+        document.getElementById("worker-title").textContent =
+          `Worker at (${args.worker_x.toFixed(1)} m, ${args.worker_y.toFixed(1)} m): ${args.worker_temp.toFixed(1)} °C`;
+        document.getElementById("smile").style.display = args.is_alert ? "none" : "";
+        document.getElementById("hot-mouth").style.display = args.is_alert ? "" : "none";
+        document.getElementById("sweat").style.display = args.is_hot ? "" : "none";
+        setPosition(args.worker_x, args.worker_y);
+        renderVents();
+        send("streamlit:setFrameHeight", {height: 530});
+      } catch (error) {
+        document.getElementById("error").hidden = false;
+        document.getElementById("error").textContent = `Unable to display the worker map: ${error.message}`;
+        send("streamlit:setFrameHeight", {height: 580});
+        console.error(error);
+      }
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+  </script>
+</body>
+</html>
