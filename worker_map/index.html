@@ -249,14 +249,6 @@
           displayModeBar: false, responsive: true
         });
         if (render !== renderCount) return;
-        chart.removeAllListeners("plotly_click");
-        chart.on("plotly_click", click => {
-          const point = click.points[0];
-          if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-            setPosition(point.x, point.y);
-            reportPosition();
-          }
-        });
         chart.removeAllListeners("plotly_relayout");
         chart.on("plotly_relayout", () => {
           setPosition(current.x, current.y);

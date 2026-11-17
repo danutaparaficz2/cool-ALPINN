@@ -11,7 +11,7 @@ python -m pip install -r requirements.txt
 python -m streamlit run simulation.py
 ```
 
-Drag the worker or fans on the map, or click the floor to move the worker. Changing ventilation settings or fan positions retrains the PINN and may take some time. `worker_map/index.html` must remain alongside `simulation.py` in the `worker_map` directory.
+Drag the worker or fans on the map, or focus them and use the arrow keys to move them. Changing ventilation settings or fan positions retrains the PINN and may take some time. `worker_map/index.html` must remain alongside `simulation.py` in the `worker_map` directory.
 
 ## Deploy
 
